@@ -1,1 +1,266 @@
+import numpy as np
+import pandas as pd
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+import seaborn as sns
+import time
+
+def apply_ann_model(X_train, y_train, X_val, y_val, X_test, y_test):
+    """
+    전처리된 데이터에 ANN 모델을 적용하고 성능을 평가합니다.
+    """
+    print("ANN 모델 학습 및 평가 시작...")
+    start_time = time.time()
+    
+    # 입력 차원 계산
+    input_dim = X_train.shape[1]
+    
+    # 모델 구성
+    model = Sequential([
+        Dense(64, activation='relu', input_dim=input_dim),
+        Dropout(0.3),
+        Dense(32, activation='relu'),
+        Dropout(0.2),
+        Dense(16, activation='relu'),
+        Dense(1, activation='sigmoid')
+    ])
+    
+    # 모델 컴파일
+    model.compile(
+        optimizer=Adam(learning_rate=0.001),
+        loss='binary_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    # Early Stopping 설정
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True,
+        verbose=1
+    )
+    
+    # 모델 학습
+    print("모델 학습 중...")
+    history = model.fit(
+        X_train, y_train,
+        validation_data=(X_val, y_val),
+        epochs=100,
+        batch_size=32,
+        callbacks=[early_stopping],
+        verbose=1
+    )
+    
+    # 검증 세트 예측
+    y_val_prob = model.predict(X_val).flatten()
+    y_val_pred = (y_val_prob >= 0.5).astype(int)
+    
+    # 테스트 세트 예측
+    y_test_prob = model.predict(X_test).flatten()
+    y_test_pred = (y_test_prob >= 0.5).astype(int)
+    
+    # 성능 평가
+    # 검증 세트 성능
+    val_accuracy = accuracy_score(y_val, y_val_pred)
+    val_precision = precision_score(y_val, y_val_pred)
+    val_recall = recall_score(y_val, y_val_pred)
+    val_f1 = f1_score(y_val, y_val_pred)
+    val_auc = roc_auc_score(y_val, y_val_prob)
+    
+    # 테스트 세트 성능
+    test_accuracy = accuracy_score(y_test, y_test_pred)
+    test_precision = precision_score(y_test, y_test_pred)
+    test_recall = recall_score(y_test, y_test_pred)
+    test_f1 = f1_score(y_test, y_test_pred)
+    test_auc = roc_auc_score(y_test, y_test_prob)
+    
+    # 실행 시간 계산
+    end_time = time.time()
+    execution_time = end_time - start_time
+    
+    # 결과 요약
+    results = {
+        'model_summary': model.summary(),
+        'history': history.history,
+        'validation': {
+            'accuracy': val_accuracy,
+            'precision': val_precision,
+            'recall': val_recall,
+            'f1': val_f1,
+            'auc': val_auc,
+            'confusion_matrix': confusion_matrix(y_val, y_val_pred),
+            'classification_report': classification_report(y_val, y_val_pred, output_dict=True)
+        },
+        'test': {
+            'accuracy': test_accuracy,
+            'precision': test_precision,
+            'recall': test_recall,
+            'f1': test_f1,
+            'auc': test_auc,
+            'confusion_matrix': confusion_matrix(y_test, y_test_pred),
+            'classification_report': classification_report(y_test, y_test_pred, output_dict=True)
+        },
+        'execution_time': execution_time
+    }
+    
+    # 결과 출력
+    print("\n===== ANN 모델 성능 =====")
+    print(f"실행 시간: {execution_time:.2f}초")
+    
+    print("\n검증 세트 성능:")
+    print(f"정확도: {val_accuracy:.4f}")
+    print(f"정밀도: {val_precision:.4f}")
+    print(f"재현율: {val_recall:.4f}")
+    print(f"F1 점수: {val_f1:.4f}")
+    print(f"AUC: {val_auc:.4f}")
+    
+    print("\n테스트 세트 성능:")
+    print(f"정확도: {test_accuracy:.4f}")
+    print(f"정밀도: {test_precision:.4f}")
+    print(f"재현율: {test_recall:.4f}")
+    print(f"F1 점수: {test_f1:.4f}")
+    print(f"AUC: {test_auc:.4f}")
+    
+    # 혼동 행렬 시각화
+    plt.figure(figsize=(15, 6))
+    
+    plt.subplot(1, 2, 1)
+    sns.heatmap(results['validation']['confusion_matrix'], annot=True, fmt='d', cmap='Blues')
+    plt.title('검증 세트 혼동 행렬')
+    plt.xlabel('예측')
+    plt.ylabel('실제')
+    
+    plt.subplot(1, 2, 2)
+    sns.heatmap(results['test']['confusion_matrix'], annot=True, fmt='d', cmap='Blues')
+    plt.title('테스트 세트 혼동 행렬')
+    plt.xlabel('예측')
+    plt.ylabel('실제')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # 학습 과정 시각화
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['loss'], label='훈련 손실')
+    plt.plot(history.history['val_loss'], label='검증 손실')
+    plt.title('학습 과정 - 손실')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['accuracy'], label='훈련 정확도')
+    plt.plot(history.history['val_accuracy'], label='검증 정확도')
+    plt.title('학습 과정 - 정확도')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return model, results
+
+# 하이퍼파라미터 튜닝용 함수 
+def tune_ann_model(X_train, y_train, X_val, y_val):
+    """
+    다양한 하이퍼파라미터 조합으로 ANN 모델을 튜닝합니다.
+    """
+    print("ANN 모델 하이퍼파라미터 튜닝 시작...")
+    input_dim = X_train.shape[1]
+    best_val_auc = 0
+    best_params = {}
+    
+    # 하이퍼파라미터 조합
+    learning_rates = [0.01, 0.001, 0.0005]
+    first_layer_sizes = [32, 64, 128]
+    dropout_rates = [0.2, 0.3, 0.4]
+    
+    for lr in learning_rates:
+        for first_layer in first_layer_sizes:
+            for dropout in dropout_rates:
+                print(f"\n테스트 중: lr={lr}, first_layer={first_layer}, dropout={dropout}")
+                
+                # 모델 구성
+                model = Sequential([
+                    Dense(first_layer, activation='relu', input_dim=input_dim),
+                    Dropout(dropout),
+                    Dense(first_layer // 2, activation='relu'),
+                    Dropout(dropout),
+                    Dense(first_layer // 4, activation='relu'),
+                    Dense(1, activation='sigmoid')
+                ])
+                
+                # 모델 컴파일
+                model.compile(
+                    optimizer=Adam(learning_rate=lr),
+                    loss='binary_crossentropy',
+                    metrics=['accuracy']
+                )
+                
+                # Early Stopping 설정
+                early_stopping = EarlyStopping(
+                    monitor='val_loss',
+                    patience=5,
+                    restore_best_weights=True,
+                    verbose=0
+                )
+                
+                # 모델 학습
+                model.fit(
+                    X_train, y_train,
+                    validation_data=(X_val, y_val),
+                    epochs=50,
+                    batch_size=32,
+                    callbacks=[early_stopping],
+                    verbose=0
+                )
+                
+                # 검증 세트 성능 평가
+                y_val_prob = model.predict(X_val).flatten()
+                val_auc = roc_auc_score(y_val, y_val_prob)
+                
+                print(f"검증 AUC: {val_auc:.4f}")
+                
+                # 최적 파라미터 업데이트
+                if val_auc > best_val_auc:
+                    best_val_auc = val_auc
+                    best_params = {
+                        'learning_rate': lr,
+                        'first_layer_size': first_layer,
+                        'dropout_rate': dropout
+                    }
+    
+    print("\n===== 최적 하이퍼파라미터 =====")
+    print(f"최적 파라미터: {best_params}")
+    print(f"최적 검증 AUC: {best_val_auc:.4f}")
+    
+    return best_params
+
+
+
+
+# ANN 모델을 위한 하이퍼파라미터 튜닝 (선택적)
+best_params = tune_ann_model(X_train, y_train, X_val, y_val)
+
+# 최적 하이퍼파라미터로 모델 학습 및 평가
+# 또는 기본 파라미터로 바로 모델 학습
+best_ann_model, ann_results = apply_ann_model(X_train, y_train, X_val, y_val, X_test, y_test)
+
+# 결과 확인
+print(f"\nANN 모델 테스트 세트 정확도: {ann_results['test']['accuracy']:.4f}")
+print(f"ANN 모델 테스트 세트 AUC: {ann_results['test']['auc']:.4f}")
+
+# KNN과 성능 비교
+print("\n===== KNN vs ANN 성능 비교 =====")
+print(f"KNN 테스트 정확도: {knn_results['test']['accuracy']:.4f}, AUC: {knn_results['test']['auc']:.4f}")
+print(f"ANN 테스트 정확도: {ann_results['test']['accuracy']:.4f}, AUC: {ann_results['test']['auc']:.4f}")
+      
 
